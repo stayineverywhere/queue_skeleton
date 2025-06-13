@@ -201,5 +201,33 @@ Reply dequeue(Queue* queue) {
 
 
 Queue* range(Queue* queue, Key start, Key end) {
-	return nullptr;
+	HeapQueue* q = reinterpret_cast<HeapQueue*>(queue);
+	if (!q) return nullptr;
+
+	// 새로운 큐 할당 및 초기화
+	HeapQueue* new_q = new HeapQueue;
+	new_q->heap = new HeapNode[q->capacity]; // 동일 용량으로 생성
+	new_q->size = 0;
+	new_q->capacity = q->capacity;
+
+	// thread-safe 보장
+	std::lock_guard<std::mutex> lock(q->mtx);
+
+	for (int i = 0; i < q->size; ++i) {
+		Key k = q->heap[i].key;
+		if (k >= start && k <= end) {
+			// 복사 후 삽입
+			HeapNode& dest = new_q->heap[new_q->size];
+			node_copy(dest, { q->heap[i].key, q->heap[i].value, q->heap[i].value_size });
+			new_q->size++;
+		}
+	}
+
+	// 새로운 큐의 힙 정렬
+	for (int i = new_q->size / 2 - 1; i >= 0; --i) {
+		heapify_down(new_q, i);
+	}
+
+	return reinterpret_cast<Queue*>(new_q);
 }
+
