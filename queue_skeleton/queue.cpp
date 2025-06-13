@@ -11,7 +11,7 @@ struct HeapNode {
 	int value_size;
 };
 
-struct Queue {
+struct HeapQueue { 
 	HeapNode* heap;
 	int size;
 	int capacity;
@@ -46,24 +46,23 @@ static int left(int i) { return 2 * i + 1; }
 static int right(int i) { return 2 * i + 2; }
 
 Queue* init(void) {
-	Queue* q = new Queue;
+	HeapQueue* q = new HeapQueue;
 	q->heap = new HeapNode[INIT_CAPACITY];
 	q->size = 0;
 	q->capacity = INIT_CAPACITY;
-	return q;
+	return reinterpret_cast<Queue*>(q); // 타입 캐스팅
 }
 
 
 void release(Queue* queue) {
-	if (!queue) return;
-	for (int i = 0; i < queue->size; ++i) {
-		node_free(queue->heap[i]);
-	}
-	delete[] queue->heap;
-	delete queue;
+	HeapQueue* q = reinterpret_cast<HeapQueue*>(queue);
+	if (!q) return;
+	for (int i = 0; i < q->size; ++i) node_free(q->heap[i]);
+	delete[] q->heap;
+	delete q;
 }
 
-static int find_key(Queue* q, Key key) {
+static int find_key(HeapQueue* q, Key key) {
 	for (int i = 0; i < q->size; ++i) {
 		if (q->heap[i].key == key) return i;
 	}
@@ -71,7 +70,7 @@ static int find_key(Queue* q, Key key) {
 }
 
 
-static void heapify_up(Queue* q, int idx) {
+static void heapify_up(HeapQueue* q, int idx) {
 	while (idx > 0 && q->heap[parent(idx)].key > q->heap[idx].key) {
 		swap(q->heap[parent(idx)], q->heap[idx]);
 		idx = parent(idx);
@@ -79,7 +78,7 @@ static void heapify_up(Queue* q, int idx) {
 }
 
 
-static void heapify_down(Queue* q, int idx) {
+static void heapify_down(HeapQueue* q, int idx) {
 	int smallest = idx;
 	int l = left(idx), r = right(idx);
 	if (l < q->size && q->heap[l].key < q->heap[smallest].key) smallest = l;
@@ -118,40 +117,45 @@ Node* nclone(Node* node) {
 
 
 Reply enqueue(Queue* queue, Item item) {
-	Reply reply = { false, {0, nullptr, 0} };
-	if (!queue || !item.value || item.value_size <= 0) return reply;
+	HeapQueue* q = reinterpret_cast<HeapQueue*>(queue);
+	Reply reply;
+	reply.success = false;
+	reply.item.key = 0;
+	reply.item.value = nullptr;
+	reply.item.value_size = 0;
+	if (!q || !item.value || item.value_size <= 0) return reply;
 
-	std::lock_guard<std::mutex> lock(queue->mtx);
+	std::lock_guard<std::mutex> lock(q->mtx);
 
-	int idx = find_key(queue, item.key);
+	int idx = find_key(q, item.key);
 	if (idx != -1) {
 		// key 중복: value만 교체(깊은 복사)
-		node_free(queue->heap[idx]);
-		node_copy(queue->heap[idx], item);
+		node_free(q->heap[idx]);
+		node_copy(q->heap[idx], item);
 		reply.success = true;
 		reply.item = item;
 		return reply;
 	}
 
 	// 용량 부족시 doubling
-	if (queue->size == queue->capacity) {
-		int newcap = queue->capacity * 2;
+	if (q->size == q->capacity) {
+		int newcap = q->capacity * 2;
 		HeapNode* newheap = new HeapNode[newcap];
-		for (int i = 0; i < queue->size; ++i) {
-			node_copy(newheap[i], { queue->heap[i].key, queue->heap[i].value, queue->heap[i].value_size });
-			node_free(queue->heap[i]);
+		for (int i = 0; i < q->size; ++i) {
+			node_copy(newheap[i], { q->heap[i].key, q->heap[i].value, q->heap[i].value_size });
+			node_free(q->heap[i]);
 		}
-		delete[] queue->heap;
-		queue->heap = newheap;
-		queue->capacity = newcap;
+		delete[] q->heap;
+		q->heap = newheap;
+		q->capacity = newcap;
 	}
 
 	// 새 노드 삽입
 	HeapNode n;
 	node_copy(n, item);
-	queue->heap[queue->size] = n;
-	heapify_up(queue, queue->size);
-	queue->size++;
+	q->heap[q->size] = n;
+	heapify_up(q, q->size);
+	q->size++;
 
 	reply.success = true;
 	reply.item = item;
@@ -159,15 +163,21 @@ Reply enqueue(Queue* queue, Item item) {
 }
 
 
+
 Reply dequeue(Queue* queue) {
-	Reply reply = { false, {0, nullptr, 0} };
-	if (!queue) return reply;
+	HeapQueue* q = reinterpret_cast<HeapQueue*>(queue);
+	Reply reply;
+	reply.success = false;
+	reply.item.key = 0;
+	reply.item.value = nullptr;
+	reply.item.value_size = 0;
+	if (!q) return reply;
 
-	std::lock_guard<std::mutex> lock(queue->mtx);
+	std::lock_guard<std::mutex> lock(q->mtx);
 
-	if (queue->size == 0) return reply;
+	if (q->size == 0) return reply;
 
-	HeapNode& top = queue->heap[0];
+	HeapNode& top = q->heap[0];
 	// 반환용 깊은 복사
 	Item ret;
 	ret.key = top.key;
@@ -180,14 +190,15 @@ Reply dequeue(Queue* queue) {
 
 	// 힙에서 제거
 	node_free(top);
-	if (queue->size > 1) {
-		queue->heap[0] = queue->heap[queue->size - 1];
-		heapify_down(queue, 0);
+	if (q->size > 1) {
+		q->heap[0] = q->heap[q->size - 1];
+		heapify_down(q, 0);
 	}
-	queue->size--;
+	q->size--;
 
 	return reply;
 }
+
 
 Queue* range(Queue* queue, Key start, Key end) {
 	return nullptr;
