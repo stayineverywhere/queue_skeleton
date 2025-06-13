@@ -8,7 +8,9 @@ typedef void* Value;
 
 typedef struct {
     Key key;
+	void* value;  // void*로 정의, 실제 자료형은 자유롭게 변경 가능
     Value value;
+	int value_size;  // value의 크기(바이트 단위), 필요시 사용 
 } Item;
 
 typedef struct {
