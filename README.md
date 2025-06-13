@@ -5,35 +5,40 @@
 - **제출일**: 2025-06-13 (금요일)
 
 
-## 구현 내용
+## 구현 기능 요약
 
 ### 핵심 기능
-- **Thread-safe한 Priority Queue** 구현 (min-heap 구조 기반)
-- 동시 다중 클라이언트 환경에서 안전하게 `enqueue`, `dequeue`, `range` 수행 가능
-- `std::mutex`를 이용한 락 기반 동기화
+- **enqueue()** : key가 존재하면 value 덮어쓰기 (update) , 없으면 새 노드 삽입
+- **dequeue()** : key 기준 우선순위가 가장 높은 (가장 작은) 노드 제거 및 반환
+- **range(start , end)** : start ≤ key ≤ end 범위 내 노드 복사 후 새로운 큐 생성
+- **깊은 복사** : 모든 반환 item/value는 깊은 복사 되어서 메인에서 해제 가능
+- **thread - safe** : std::mutex 사용 , enqueue, dequeue , range에 락 적용
 
 ### 구현된 함수 목록 (`queue.cpp`)
-- `Queue* init(void)`
-- `void release(Queue* queue)`
-- `Reply enqueue(Queue* queue, Item item)`
-  - 기존 key가 존재하면 **value를 덮어씀 (update)**
-  - `Reply.item`은 **깊은 복사**되어 반환
-- `Reply dequeue(Queue* queue)`
-  - 우선순위가 가장 높은(=key가 가장 작은) item을 제거 후 반환
-- `Queue* range(Queue* queue, Key start, Key end)`
-  - 주어진 key 범위에 해당하는 노드들을 **복제한 새로운 큐** 생성
+**Queue** 연산
+- queue init(void)
+- void release (Queue* queue)
+- Reply enqueue(Queue* queue, Item item)
+- Reply dequeue(Queue* queue)
+- Queue* range(Queue* queue, Key start, Key end)
+
+**노드 관리**
+- Node* nalloc(Item item)
+- void nfree(Node* node)
+- Node* nclone(Node* node)
+
+### 자료구조
+- **Min-heap** 기반 배열 구조로 priority queue 구현
+- **Open addressing hash table**로 key → heap index 매핑 관리 (O(1) 접근)
+- **Heap doubling**으로 동적 메모리 자동 확장 지원
+
+### 동기화
+- `std::mutex` + `std::lock_guard`로 쓰레드 간 경합 방지
+- 다중 클라이언트 쓰레드가 동시에 `enqueue`/`dequeue` 가능
 
 ### 메모리 및 안정성
-- 모든 동적 메모리(`value`, `heap`)는 `new/delete[]`를 통해 수동 관리
-- 리턴된 `Reply.item.value`는 메인에서 해제해도 안전한 **깊은 복사 구조**
-- `enqueue()`와 `dequeue()` 중간에 context switch 발생해도 무결성 유지
-
-
-## 사용 제한 / 주의사항
-
-- STL 컨테이너 (`vector`, `map` 등) **미사용**
-- `qtype.h`, `queue.cpp`만 수정하였으며 `queue.h`, `main.c`는 변경 없음
-- 테스트 코드는 `main.c` 기반 단일 클라이언트 테스트로 작성하였으며, 멀티스레드 환경도 안전함
+-  `value`는 `new char[]`로 깊은 복사됨 → 원본 해제해도 안전
+- 모든 힙 노드는 `node_free()` 또는 `delete[]`로 명시적 해제
 
 ## 진행 상황 및 추가 설명
 
